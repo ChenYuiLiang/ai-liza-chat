@@ -225,7 +225,9 @@ async function speak(text){
   if(!r.ok){throw new Error('TTS '+r.status+' '+(await r.text()).slice(0,120));}
   const blob=await r.blob(); const src=URL.createObjectURL(blob);
   return new Promise((res)=>{ audio=new Audio(src); audio.onplay=()=>speaking(true);
-    audio.onended=()=>{speaking(false);URL.revokeObjectURL(src);res();}; audio.onerror=()=>{speaking(false);res();}; audio.play(); });
+    audio.onended=()=>{speaking(false);URL.revokeObjectURL(src);res();}; audio.onerror=()=>{speaking(false);res();};
+    const p=audio.play(); if(p)p.catch(()=>{speaking(false);res();}); // ← 防止 autoplay 擋住時 Promise 卡死
+  });
 }
 
 let busy=false;
@@ -248,17 +250,23 @@ $('text').addEventListener('keydown',e=>{if(e.key==='Enter')handle($('text').val
 // ---- speech recognition ----
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let rec=null,recOn=false;
-if(SR){
-  rec=new SR(); rec.interimResults=false; rec.maxAlternatives=1;
-  rec.onresult=e=>{const t=e.results[0][0].transcript; handle(t);};
-  rec.onend=()=>{recOn=false;$('mic').classList.remove('rec'); if(!busy)setState('換你說…');};
-  rec.onerror=e=>{recOn=false;$('mic').classList.remove('rec'); if(e.error!=='no-speech')addSys('辨識：'+e.error);};
-}else{ setState('此瀏覽器不支援語音辨識，請用文字輸入（建議 Chrome）'); }
+if(!SR){ setState('此瀏覽器不支援語音辨識，請用文字輸入（建議 Chrome）'); }
+function newRec(){
+  if(!SR)return null;
+  const r=new SR(); r.interimResults=false; r.maxAlternatives=1;
+  r.onresult=e=>{const t=e.results[0][0].transcript; handle(t);};
+  r.onend=()=>{recOn=false;$('mic').classList.remove('rec'); if(!busy)setState('換你說…');};
+  r.onerror=e=>{recOn=false;$('mic').classList.remove('rec'); if(e.error!=='no-speech')addSys('辨識：'+e.error);};
+  return r;
+}
 $('mic').onclick=()=>{
-  if(!rec){alert('請用 Chrome 以使用語音');return;}
+  if(!SR){alert('請用 Chrome 以使用語音');return;}
   if(recOn){rec.stop();return;}
   if(!ready()){$('setup').style.display='flex';return;}
-  rec.lang=$('langsel').value; try{rec.start(); recOn=true;$('mic').classList.add('rec'); setState('聆聽中…（再點一下停止）');}catch(e){}
+  rec=newRec();                                          // ← 每次建新實例，避免二次 start() 無效
+  rec.lang=$('langsel').value;
+  try{rec.start(); recOn=true;$('mic').classList.add('rec'); setState('聆聽中…（再點一下停止）');}
+  catch(e){addSys('麥克風啟動失敗：'+e.message);}
 };
 $('langsel').onchange=()=>{$('text').placeholder=$('langsel').value==='en-US'?'Type a message, or use the mic…':'輸入訊息，或用麥克風說話…';};
 </script>
