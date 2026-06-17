@@ -7,9 +7,9 @@
 <style>
   :root{--bg0:#06101F;--bg1:#0A1B30;--teal:#3FB6A8;--gold:#E6AE48;--ink:#EAF3F2;--mute:#8FA6B5;--pink:#E98AB0;}
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%;font-family:"Helvetica Neue",Arial,"PingFang TC","Microsoft JhengHei",sans-serif;color:var(--ink);
+  html,body{height:100%;height:-webkit-fill-available;font-family:"Helvetica Neue",Arial,"PingFang TC","Microsoft JhengHei",sans-serif;color:var(--ink);
     background:radial-gradient(circle at 50% 25%,#0E2742,#06101F 80%)}
-  #app{display:flex;height:100vh;gap:18px;padding:18px}
+  #app{display:flex;height:100vh;height:100dvh;gap:18px;padding:18px}
   /* avatar */
   #stage{flex:0 0 42%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
   #avatarWrap{width:min(46vh,360px);height:min(46vh,360px);border-radius:50%;overflow:hidden;position:relative;
@@ -53,15 +53,39 @@
   .topbtn{position:fixed;top:14px;right:14px;z-index:5;background:rgba(8,18,32,.7);color:var(--ink);
     border:1px solid rgba(63,182,168,.3);font-size:.85rem}
   a{color:var(--teal)}
-  @media(max-width:760px){#app{flex-direction:column}#stage{flex:0 0 auto}#avatarWrap{width:200px;height:200px}}
+  /* iOS tap-to-start overlay */
+  #tapStart{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+    background:rgba(6,16,31,.92);cursor:pointer;-webkit-tap-highlight-color:transparent}
+  #tapStart .circle{width:90px;height:90px;border-radius:50%;border:3px solid var(--teal);display:flex;align-items:center;justify-content:center;font-size:2.5rem}
+  #tapStart p{color:var(--teal);font-size:1.1rem;letter-spacing:.05em}
+  #tapStart small{color:var(--mute);font-size:.8rem}
+  @media(max-width:760px){
+    #app{flex-direction:column;height:100vh;height:-webkit-fill-available;height:100dvh;padding:10px;gap:8px}
+    #stage{flex:0 0 auto;gap:6px}
+    #avatarWrap{width:90px;height:90px}
+    #name b{font-size:1rem}#name span{font-size:.75rem}
+    #state{font-size:.78rem}
+    #chat{flex:1;min-height:0}
+    #log{padding:12px;gap:8px}
+    .msg{font-size:.9rem;padding:8px 12px}
+    #bar{padding:8px;gap:8px}
+    #mic{width:44px;height:44px;font-size:1.1rem}
+    #text{font-size:.9rem;padding:9px 12px}
+    #send{padding:9px 14px;font-size:.9rem}
+  }
 </style>
 </head>
 <body>
 <button class="topbtn" id="openSetup">⚙ 設定</button>
+<div id="tapStart">
+  <div class="circle">🎙</div>
+  <p>點此開始和 AI Liza 對話</p>
+  <small>啟動影像與聲音</small>
+</div>
 <div id="app">
   <div id="stage">
     <div id="avatarWrap">
-      <video id="vid" src="liza_face2.mp4" poster="liza_idle.jpg" muted loop playsinline></video>
+      <video id="vid" src="liza_face2.mp4" poster="liza_idle.jpg" muted loop playsinline autoplay></video>
     </div>
     <div id="name"><b>AI Liza</b><span>李玲玉 · SSIM 2026</span></div>
     <div id="state">準備中…</div>
@@ -175,12 +199,28 @@ $('saveBtn').onclick=()=>{
   $('setup').style.display='none'; setState('點麥克風或輸入文字開始對話'); addSys('設定完成，開始和 AI Liza 對話吧。');
 };
 
-// ---- UI helpers ----
+// ---- tap-to-start overlay（iOS 需在同步 click 裡解鎖影音）----
 const vid=$('vid');
+$('tapStart').addEventListener('click',()=>{
+  // 1. 啟動影片
+  vid.play().catch(()=>{});
+  // 2. 解鎖音訊元素
+  unlockAudio();
+  // 3. 移除遮罩
+  $('tapStart').style.display='none';
+  if(ready()) setState('點麥克風或輸入文字開始對話');
+},{once:true});
+
+// ---- UI helpers ----
 function setState(t){$('state').textContent=t;}
 function addMsg(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;$('log').appendChild(d);$('log').scrollTop=1e9;return d;}
 function addSys(t){addMsg(t,'sys');}
-function speaking(on){$('avatarWrap').classList.toggle('speaking',on); if(on){vid.play().catch(()=>{});} else {vid.pause();}}
+function speaking(on){
+  $('avatarWrap').classList.toggle('speaking',on);
+  // 影片用 autoplay muted，不需要在非同步 callback 裡呼叫 play()
+  if(!on && !vid.paused) vid.pause();
+  if(on && vid.paused){ vid.play().catch(()=>{}); }
+}
 
 // ---- conversation memory ----
 const history=[];
@@ -217,16 +257,27 @@ async function askLLM(userText){
   }
 }
 
-let audio=null;
+// ---- Audio（iOS 解鎖：在 click handler 同步 unlock 同一個 <audio> 元素）----
+const audioEl=document.createElement('audio');
+audioEl.setAttribute('playsinline',''); audioEl.setAttribute('webkit-playsinline','');
+function unlockAudio(){
+  // 每次手勢都重新解鎖（iOS SR 結束後會重佔音訊 session）
+  audioEl.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  audioEl.play().then(()=>{audioEl.pause();audioEl.currentTime=0;}).catch(()=>{});
+}
+
 async function speak(text){
   const url=`https://api.elevenlabs.io/v1/text-to-speech/${cfg.voiceId}?optimize_streaming_latency=3&output_format=mp3_44100_128`;
   const r=await fetch(url,{method:'POST',headers:{'xi-api-key':cfg.xiKey,'content-type':'application/json'},
     body:JSON.stringify({text,model_id:'eleven_multilingual_v2',voice_settings:{stability:0.5,similarity_boost:1.0}})});
   if(!r.ok){throw new Error('TTS '+r.status+' '+(await r.text()).slice(0,120));}
   const blob=await r.blob(); const src=URL.createObjectURL(blob);
-  return new Promise((res)=>{ audio=new Audio(src); audio.onplay=()=>speaking(true);
-    audio.onended=()=>{speaking(false);URL.revokeObjectURL(src);res();}; audio.onerror=()=>{speaking(false);res();};
-    const p=audio.play(); if(p)p.catch(()=>{speaking(false);res();}); // ← 防止 autoplay 擋住時 Promise 卡死
+  return new Promise((res)=>{
+    audioEl.onplay=()=>speaking(true);
+    audioEl.onended=()=>{speaking(false);URL.revokeObjectURL(src);res();};
+    audioEl.onerror=()=>{speaking(false);res();};
+    audioEl.src=src;
+    const p=audioEl.play(); if(p)p.catch(()=>{speaking(false);res();});
   });
 }
 
@@ -244,8 +295,8 @@ async function handle(userText){
 }
 
 // ---- text input ----
-$('send').onclick=()=>handle($('text').value);
-$('text').addEventListener('keydown',e=>{if(e.key==='Enter')handle($('text').value);});
+$('send').onclick=()=>{ unlockAudio(); handle($('text').value); };
+$('text').addEventListener('keydown',e=>{if(e.key==='Enter'){ unlockAudio(); handle($('text').value); }});
 
 // ---- speech recognition ----
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -254,7 +305,7 @@ if(!SR){ setState('此瀏覽器不支援語音辨識，請用文字輸入（建�
 function newRec(){
   if(!SR)return null;
   const r=new SR(); r.interimResults=false; r.maxAlternatives=1;
-  r.onresult=e=>{const t=e.results[0][0].transcript; handle(t);};
+  r.onresult=e=>{const t=e.results[0][0].transcript; setTimeout(()=>handle(t),500);}; // 等 iOS 釋放 SR 音訊 session
   r.onend=()=>{recOn=false;$('mic').classList.remove('rec'); if(!busy)setState('換你說…');};
   r.onerror=e=>{recOn=false;$('mic').classList.remove('rec'); if(e.error!=='no-speech')addSys('辨識：'+e.error);};
   return r;
@@ -263,12 +314,15 @@ $('mic').onclick=()=>{
   if(!SR){alert('請用 Chrome 以使用語音');return;}
   if(recOn){rec.stop();return;}
   if(!ready()){$('setup').style.display='flex';return;}
+  unlockAudio();                                         // ← 同步 unlock，iOS 才允許後續播音
   rec=newRec();                                          // ← 每次建新實例，避免二次 start() 無效
   rec.lang=$('langsel').value;
   try{rec.start(); recOn=true;$('mic').classList.add('rec'); setState('聆聽中…（再點一下停止）');}
   catch(e){addSys('麥克風啟動失敗：'+e.message);}
 };
 $('langsel').onchange=()=>{$('text').placeholder=$('langsel').value==='en-US'?'Type a message, or use the mic…':'輸入訊息，或用麥克風說話…';};
+// iOS SR 結束後重佔音訊 session，touchend 時再解鎖一次
+$('mic').addEventListener('touchend',()=>{ setTimeout(unlockAudio,300); },{passive:true});
 </script>
 </body>
 </html>
