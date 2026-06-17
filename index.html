@@ -165,7 +165,7 @@ $('openSetup').onclick=()=>{$('setup').style.display='flex';};
 $('llmProvider').onchange=e=>{
   const v=e.target.value;
   if(v==='openai'){$('llmBase').value='https://api.openai.com/v1';$('llmModel').value='gpt-4o-mini';}
-  if(v==='anthropic'){$('llmBase').value='https://api.anthropic.com/v1';$('llmModel').value='claude-3-5-haiku-latest';}
+  if(v==='anthropic'){$('llmBase').value='https://api.anthropic.com/v1';$('llmModel').value='claude-haiku-4-5';}
   if(v==='gemini'){$('llmBase').value='https://generativelanguage.googleapis.com/v1beta';$('llmModel').value='gemini-2.0-flash';}
 };
 
