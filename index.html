@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AI Liza · Live Chat (Prototype)</title>
+<style>
+  :root{--bg0:#06101F;--bg1:#0A1B30;--teal:#3FB6A8;--gold:#E6AE48;--ink:#EAF3F2;--mute:#8FA6B5;--pink:#E98AB0;}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;font-family:"Helvetica Neue",Arial,"PingFang TC","Microsoft JhengHei",sans-serif;color:var(--ink);
+    background:radial-gradient(circle at 50% 25%,#0E2742,#06101F 80%)}
+  #app{display:flex;height:100vh;gap:18px;padding:18px}
+  /* avatar */
+  #stage{flex:0 0 42%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+  #avatarWrap{width:min(46vh,360px);height:min(46vh,360px);border-radius:50%;overflow:hidden;position:relative;
+    border:3px solid var(--teal);box-shadow:0 0 50px rgba(63,182,168,.25)}
+  #avatarWrap video,#avatarWrap img{width:100%;height:100%;object-fit:cover;object-position:center 18%}
+  #avatarWrap.speaking{box-shadow:0 0 60px rgba(230,174,72,.5);border-color:var(--gold)}
+  #ring{position:absolute;inset:-3px;border-radius:50%;pointer-events:none}
+  #name{text-align:center}
+  #name b{font-size:1.3rem}#name span{display:block;color:var(--teal);font-size:.85rem;letter-spacing:.15em;margin-top:4px}
+  #state{color:var(--mute);font-size:.85rem;min-height:1.2em}
+  /* chat */
+  #chat{flex:1;display:flex;flex-direction:column;background:rgba(8,18,32,.55);border:1px solid rgba(63,182,168,.2);
+    border-radius:16px;overflow:hidden}
+  #log{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:80%;padding:10px 14px;border-radius:14px;line-height:1.5;white-space:pre-wrap}
+  .me{align-self:flex-end;background:#16324a}
+  .liza{align-self:flex-start;background:rgba(63,182,168,.14);border:1px solid rgba(63,182,168,.25)}
+  .sys{align-self:center;color:var(--mute);font-size:.82rem;text-align:center;background:none}
+  #bar{display:flex;gap:10px;padding:12px;border-top:1px solid rgba(63,182,168,.18);align-items:center}
+  #text{flex:1;background:#0c1c30;border:1px solid rgba(63,182,168,.25);border-radius:24px;color:var(--ink);
+    padding:11px 16px;font-size:1rem;outline:none}
+  button{cursor:pointer;border:none;border-radius:24px;font-size:.95rem;font-weight:600;padding:10px 16px;color:#04111a}
+  #mic{background:var(--teal);width:52px;height:52px;border-radius:50%;font-size:1.3rem;display:flex;align-items:center;justify-content:center}
+  #mic.rec{background:var(--pink);animation:pulse 1s infinite}
+  @keyframes pulse{50%{transform:scale(1.08)}}
+  #send{background:var(--gold)}
+  .ghost{background:transparent;color:var(--mute);border:1px solid rgba(143,166,181,.4)}
+  #langsel{background:#0c1c30;color:var(--ink);border:1px solid rgba(63,182,168,.3);border-radius:20px;padding:8px;font-size:.85rem}
+  /* settings */
+  #setup{position:fixed;inset:0;background:rgba(3,8,16,.92);display:flex;align-items:center;justify-content:center;z-index:20;padding:20px}
+  #setupCard{background:var(--bg1);border:1px solid rgba(63,182,168,.3);border-radius:16px;max-width:560px;width:100%;
+    padding:26px;max-height:90vh;overflow-y:auto}
+  #setupCard h2{margin-bottom:6px}#setupCard p.sub{color:var(--mute);font-size:.85rem;margin-bottom:18px}
+  label{display:block;font-size:.85rem;color:var(--teal);margin:14px 0 6px}
+  input,select,textarea{width:100%;background:#0c1c30;border:1px solid rgba(63,182,168,.25);border-radius:10px;
+    color:var(--ink);padding:10px 12px;font-size:.92rem;font-family:inherit}
+  textarea{min-height:90px;resize:vertical}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .hint{color:var(--mute);font-size:.76rem;margin-top:4px;line-height:1.4}
+  #saveBtn{background:var(--teal);width:100%;margin-top:20px;padding:13px}
+  .topbtn{position:fixed;top:14px;right:14px;z-index:5;background:rgba(8,18,32,.7);color:var(--ink);
+    border:1px solid rgba(63,182,168,.3);font-size:.85rem}
+  a{color:var(--teal)}
+  @media(max-width:760px){#app{flex-direction:column}#stage{flex:0 0 auto}#avatarWrap{width:200px;height:200px}}
+</style>
+</head>
+<body>
+<button class="topbtn" id="openSetup">⚙ 設定</button>
+<div id="app">
+  <div id="stage">
+    <div id="avatarWrap">
+      <video id="vid" src="liza_face2.mp4" poster="liza_idle.jpg" muted loop playsinline></video>
+    </div>
+    <div id="name"><b>AI Liza</b><span>李玲玉 · SSIM 2026</span></div>
+    <div id="state">準備中…</div>
+  </div>
+  <div id="chat">
+    <div id="log"></div>
+    <div id="bar">
+      <button id="mic" title="按住說話 / 點一下開始">🎤</button>
+      <select id="langsel" title="辨識語言">
+        <option value="zh-TW">中文</option>
+        <option value="en-US">English</option>
+      </select>
+      <input id="text" placeholder="輸入訊息，或用麥克風說話…"/>
+      <button id="send">送出</button>
+    </div>
+  </div>
+</div>
+
+<div id="setup">
+  <div id="setupCard">
+    <h2>AI Liza · 即時對話原型</h2>
+    <p class="sub">這是本機原型：聽（瀏覽器語音辨識）→ 想（你的 LLM）→ 說（ElevenLabs 的 Liza 聲音）→ 臉（會說話的影片）。所有金鑰只存在你的瀏覽器（localStorage），不會傳給任何第三方。</p>
+
+    <label>① LLM 供應商</label>
+    <select id="llmProvider">
+      <option value="openai">OpenAI 相容（OpenAI / Groq / OpenRouter / 本地…）</option>
+      <option value="anthropic">Anthropic (Claude)</option>
+      <option value="gemini">Google Gemini</option>
+    </select>
+    <div class="row" style="margin-top:8px">
+      <div><label>API Base URL</label><input id="llmBase" placeholder="https://api.openai.com/v1"/></div>
+      <div><label>模型</label><input id="llmModel" placeholder="gpt-4o-mini"/></div>
+    </div>
+    <label>LLM API Key</label>
+    <input id="llmKey" type="password" placeholder="sk-…"/>
+    <p class="hint">取得方式：OpenAI → platform.openai.com/api-keys；Anthropic → console.anthropic.com；Gemini → aistudio.google.com/apikey。建議便宜快速的模型（如 gpt-4o-mini / claude-haiku / gemini-flash）。</p>
+
+    <label>② ElevenLabs API Key（Liza 的聲音）</label>
+    <input id="xiKey" type="password" placeholder="ElevenLabs key…"/>
+    <div class="row" style="margin-top:8px">
+      <div><label>聲音（Voice）</label><select id="xiVoice"><option value="">先填 key 再載入清單</option></select></div>
+      <div style="flex:0 0 120px;display:flex;align-items:flex-end"><button class="ghost" id="loadVoices" style="width:100%">載入聲音</button></div>
+    </div>
+    <p class="hint">選 <b>Liza EN</b>（我們做好的聲音）。key 在 ElevenLabs → 右上頭像 → API Keys。</p>
+
+    <label>③ Liza 人設（可改）</label>
+    <textarea id="persona"></textarea>
+
+    <button id="saveBtn">儲存並開始對話</button>
+    <p class="hint" style="margin-top:14px">提示：用 Chrome 開啟、允許麥克風權限。要做到逐字精準對嘴（真‧即時虛擬人），需改接 HeyGen LiveAvatar 串流 API——這版先用「講話時播放影片」近似。</p>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const DEFAULT_PERSONA=`You are Professor Liza Lee (李玲玉), Dean of the College of Humanities and Smart Technology at Chaoyang University of Technology (CYUT), Taiwan, and chair of the SSIM 2026 symposium. Your themes: Human-Centered AI, Sustainable Digital Ecosystems, and the idea that the final "missing seed" is CARE — Connect, Adapt, Respect, Empower. You are warm, thoughtful, encouraging and human-centered.
+Rules:
+- Always reply in the SAME language the user used (Traditional Chinese 繁體中文, or English).
+- Keep replies short and natural for speaking aloud: 1–3 sentences, conversational, no markdown, no lists, no emoji.
+- Stay in character as Liza; be kind and inspiring.`;
+
+const cfg=JSON.parse(localStorage.getItem('lizaCfg')||'{}');
+function fillSetup(){
+  $('llmProvider').value=cfg.provider||'openai';
+  $('llmBase').value=cfg.base||'https://api.openai.com/v1';
+  $('llmModel').value=cfg.model||'gpt-4o-mini';
+  $('llmKey').value=cfg.llmKey||'';
+  $('xiKey').value=cfg.xiKey||'';
+  $('persona').value=cfg.persona||DEFAULT_PERSONA;
+  if(cfg.voiceId){const o=document.createElement('option');o.value=cfg.voiceId;o.textContent=cfg.voiceName||'已選聲音';o.selected=true;$('xiVoice').appendChild(o);}
+}
+fillSetup();
+const ready=()=>cfg.llmKey&&cfg.xiKey&&cfg.voiceId;
+if(ready()) $('setup').style.display='none', setState('點麥克風或輸入文字開始對話');
+
+$('openSetup').onclick=()=>{$('setup').style.display='flex';};
+$('llmProvider').onchange=e=>{
+  const v=e.target.value;
+  if(v==='openai'){$('llmBase').value='https://api.openai.com/v1';$('llmModel').value='gpt-4o-mini';}
+  if(v==='anthropic'){$('llmBase').value='https://api.anthropic.com/v1';$('llmModel').value='claude-3-5-haiku-latest';}
+  if(v==='gemini'){$('llmBase').value='https://generativelanguage.googleapis.com/v1beta';$('llmModel').value='gemini-2.0-flash';}
+};
+
+$('loadVoices').onclick=async()=>{
+  const key=$('xiKey').value.trim(); if(!key){alert('先填 ElevenLabs API Key');return;}
+  $('loadVoices').textContent='載入中…';
+  try{
+    const r=await fetch('https://api.elevenlabs.io/v2/voices?page_size=100',{headers:{'xi-api-key':key}});
+    const raw=await r.text();
+    if(!r.ok) throw new Error('HTTP '+r.status+'：'+raw.slice(0,200));
+    let d; try{d=JSON.parse(raw);}catch(_){throw new Error('回應非 JSON：'+raw.slice(0,160));}
+    const list=d.voices||d.items||[];
+    if(!Array.isArray(list)||!list.length) throw new Error('沒有取得任何聲音。請確認此金鑰有 Voices 讀取權限，且帳號裡有 Liza EN 這個聲音。回應：'+raw.slice(0,160));
+    const sel=$('xiVoice');sel.innerHTML='';
+    list.forEach(v=>{const o=document.createElement('option');o.value=v.voice_id;o.textContent=v.name||v.voice_id;if(/liza/i.test(v.name||''))o.selected=true;sel.appendChild(o);});
+    $('loadVoices').textContent='已載入 ✓（'+list.length+'）';
+  }catch(e){alert('載入聲音失敗：'+e.message);$('loadVoices').textContent='重試';}
+};
+
+$('saveBtn').onclick=()=>{
+  const sel=$('xiVoice');
+  Object.assign(cfg,{
+    provider:$('llmProvider').value, base:$('llmBase').value.trim().replace(/\/$/,''),
+    model:$('llmModel').value.trim(), llmKey:$('llmKey').value.trim(),
+    xiKey:$('xiKey').value.trim(), voiceId:sel.value, voiceName:sel.options[sel.selectedIndex]?.textContent,
+    persona:$('persona').value.trim()||DEFAULT_PERSONA
+  });
+  if(!cfg.llmKey||!cfg.xiKey){alert('請填 LLM key 與 ElevenLabs key');return;}
+  if(!cfg.voiceId){alert('請載入並選擇聲音（Liza EN）');return;}
+  localStorage.setItem('lizaCfg',JSON.stringify(cfg));
+  $('setup').style.display='none'; setState('點麥克風或輸入文字開始對話'); addSys('設定完成，開始和 AI Liza 對話吧。');
+};
+
+// ---- UI helpers ----
+const vid=$('vid');
+function setState(t){$('state').textContent=t;}
+function addMsg(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;$('log').appendChild(d);$('log').scrollTop=1e9;return d;}
+function addSys(t){addMsg(t,'sys');}
+function speaking(on){$('avatarWrap').classList.toggle('speaking',on); if(on){vid.play().catch(()=>{});} else {vid.pause();}}
+
+// ---- conversation memory ----
+const history=[];
+async function rawJson(r){
+  const txt=await r.text();
+  if(!r.ok){
+    let m=txt; try{const j=JSON.parse(txt); m=(j.error&&(j.error.message||j.error))||j.message||txt;}catch(_){ }
+    throw new Error('HTTP '+r.status+'：'+String(m).slice(0,260));
+  }
+  try{return JSON.parse(txt);}catch(_){throw new Error('回應非 JSON：'+txt.slice(0,200));}
+}
+async function askLLM(userText){
+  history.push({role:'user',content:userText});
+  const sys=cfg.persona;
+  if(cfg.provider==='anthropic'){
+    const r=await fetch(cfg.base+'/messages',{method:'POST',headers:{'x-api-key':cfg.llmKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},
+      body:JSON.stringify({model:cfg.model,max_tokens:300,system:sys,messages:history})});
+    const d=await rawJson(r);
+    if(!d.content) throw new Error('Claude 回應缺 content：'+JSON.stringify(d).slice(0,200));
+    const t=d.content.map(c=>c.text||'').join(''); history.push({role:'assistant',content:t}); return t;
+  } else if(cfg.provider==='gemini'){
+    const contents=history.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+    const r=await fetch(`${cfg.base}/models/${cfg.model}:generateContent?key=${cfg.llmKey}`,{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({system_instruction:{parts:[{text:sys}]},contents})});
+    const d=await rawJson(r);
+    if(!d.candidates||!d.candidates[0]) throw new Error('Gemini 無回覆：'+JSON.stringify(d).slice(0,200));
+    const t=d.candidates[0].content.parts.map(p=>p.text||'').join(''); history.push({role:'assistant',content:t}); return t;
+  } else {
+    const r=await fetch(cfg.base+'/chat/completions',{method:'POST',headers:{'authorization':'Bearer '+cfg.llmKey,'content-type':'application/json'},
+      body:JSON.stringify({model:cfg.model,max_tokens:300,messages:[{role:'system',content:sys},...history]})});
+    const d=await rawJson(r);
+    if(!d.choices||!d.choices[0]) throw new Error('LLM 無回覆：'+JSON.stringify(d).slice(0,200));
+    const t=d.choices[0].message.content; history.push({role:'assistant',content:t}); return t;
+  }
+}
+
+let audio=null;
+async function speak(text){
+  const url=`https://api.elevenlabs.io/v1/text-to-speech/${cfg.voiceId}?optimize_streaming_latency=3&output_format=mp3_44100_128`;
+  const r=await fetch(url,{method:'POST',headers:{'xi-api-key':cfg.xiKey,'content-type':'application/json'},
+    body:JSON.stringify({text,model_id:'eleven_multilingual_v2',voice_settings:{stability:0.5,similarity_boost:1.0}})});
+  if(!r.ok){throw new Error('TTS '+r.status+' '+(await r.text()).slice(0,120));}
+  const blob=await r.blob(); const src=URL.createObjectURL(blob);
+  return new Promise((res)=>{ audio=new Audio(src); audio.onplay=()=>speaking(true);
+    audio.onended=()=>{speaking(false);URL.revokeObjectURL(src);res();}; audio.onerror=()=>{speaking(false);res();}; audio.play(); });
+}
+
+let busy=false;
+async function handle(userText){
+  userText=userText.trim(); if(!userText||busy)return;
+  if(!ready()){$('setup').style.display='flex';return;}
+  busy=true; addMsg(userText,'me'); $('text').value=''; setState('思考中…');
+  try{
+    const reply=await askLLM(userText);
+    addMsg(reply,'liza'); setState('說話中…');
+    await speak(reply); setState('換你說…');
+  }catch(e){ addSys('⚠ '+e.message); setState('發生錯誤，請檢查設定/金鑰'); }
+  busy=false;
+}
+
+// ---- text input ----
+$('send').onclick=()=>handle($('text').value);
+$('text').addEventListener('keydown',e=>{if(e.key==='Enter')handle($('text').value);});
+
+// ---- speech recognition ----
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,recOn=false;
+if(SR){
+  rec=new SR(); rec.interimResults=false; rec.maxAlternatives=1;
+  rec.onresult=e=>{const t=e.results[0][0].transcript; handle(t);};
+  rec.onend=()=>{recOn=false;$('mic').classList.remove('rec'); if(!busy)setState('換你說…');};
+  rec.onerror=e=>{recOn=false;$('mic').classList.remove('rec'); if(e.error!=='no-speech')addSys('辨識：'+e.error);};
+}else{ setState('此瀏覽器不支援語音辨識，請用文字輸入（建議 Chrome）'); }
+$('mic').onclick=()=>{
+  if(!rec){alert('請用 Chrome 以使用語音');return;}
+  if(recOn){rec.stop();return;}
+  if(!ready()){$('setup').style.display='flex';return;}
+  rec.lang=$('langsel').value; try{rec.start(); recOn=true;$('mic').classList.add('rec'); setState('聆聽中…（再點一下停止）');}catch(e){}
+};
+$('langsel').onchange=()=>{$('text').placeholder=$('langsel').value==='en-US'?'Type a message, or use the mic…':'輸入訊息，或用麥克風說話…';};
+</script>
+</body>
+</html>
