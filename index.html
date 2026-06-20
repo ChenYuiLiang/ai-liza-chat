@@ -168,7 +168,7 @@ $('llmProvider').onchange=e=>{
   if(v==='openai'){$('llmBase').value='https://api.openai.com/v1';$('llmModel').value='gpt-4o-mini';}
   if(v==='anthropic'){$('llmBase').value='https://api.anthropic.com/v1';$('llmModel').value='claude-haiku-4-5';}
   if(v==='gemini'){$('llmBase').value='https://generativelanguage.googleapis.com/v1beta';$('llmModel').value='gemini-2.0-flash';}
-  if(v==='opencode'){$('llmBase').value='http://localhost:3000/zen/v1';$('llmModel').value='big-pickle';}
+  if(v==='opencode'){$('llmBase').value='https://opencode.ai/zen/v1';$('llmModel').value='big-pickle';}
 };
 
 $('loadVoices').onclick=async()=>{
