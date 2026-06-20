@@ -122,10 +122,7 @@
     </div>
     <label>LLM API Key</label>
     <input id="llmKey" type="password" placeholder="sk-…"/>
-    <label>CORS Proxy (如遇 Failed to fetch 再填)</label>
-    <input id="corsProxy" placeholder="https://corsproxy.io/? 或留空"/>
-    <p class="hint">部分 API（如 OpenCode Zen）不支援瀏覽器跨域請求。填上 CORS proxy 網址即可繞過，例如 <code>https://corsproxy.io/?</code>。</p>
-    <p class="hint">取得方式：OpenAI → platform.openai.com/api-keys；Anthropic → console.anthropic.com；Gemini → aistudio.google.com/apikey。建議便宜快速的模型（如 gpt-4o-mini / claude-haiku / gemini-flash）。</p>
+    <p class="hint">取得方式：OpenAI → platform.openai.com/api-keys；Anthropic → console.anthropic.com；Gemini → aistudio.google.com/apikey；OpenCode Zen → opencode.ai/auth。建議便宜快速的模型（如 gpt-4o-mini / claude-haiku / gemini-flash）。</p>
 
     <label>② ElevenLabs API Key（Liza 的聲音）</label>
     <input id="xiKey" type="password" placeholder="ElevenLabs key…"/>
@@ -157,7 +154,6 @@ function fillSetup(){
   $('llmBase').value=cfg.base||'https://api.openai.com/v1';
   $('llmModel').value=cfg.model||'gpt-4o-mini';
   $('llmKey').value=cfg.llmKey||'';
-  $('corsProxy').value=cfg.corsProxy||'';
   $('xiKey').value=cfg.xiKey||'';
   $('persona').value=cfg.persona||DEFAULT_PERSONA;
   if(cfg.voiceId){const o=document.createElement('option');o.value=cfg.voiceId;o.textContent=cfg.voiceName||'已選聲音';o.selected=true;$('xiVoice').appendChild(o);}
@@ -196,7 +192,6 @@ $('saveBtn').onclick=()=>{
   Object.assign(cfg,{
     provider:$('llmProvider').value, base:$('llmBase').value.trim().replace(/\/$/,''),
     model:$('llmModel').value.trim(), llmKey:$('llmKey').value.trim(),
-    corsProxy:$('corsProxy').value.trim().replace(/\/$/,''),
     xiKey:$('xiKey').value.trim(), voiceId:sel.value, voiceName:sel.options[sel.selectedIndex]?.textContent,
     persona:$('persona').value.trim()||DEFAULT_PERSONA
   });
@@ -239,27 +234,24 @@ async function rawJson(r){
   }
   try{return JSON.parse(txt);}catch(_){throw new Error('回應非 JSON：'+txt.slice(0,200));}
 }
-function proxyURL(url){
-  return cfg.corsProxy ? cfg.corsProxy + url : url;
-}
 async function askLLM(userText){
   history.push({role:'user',content:userText});
   const sys=cfg.persona;
   if(cfg.provider==='anthropic'){
-    const r=await fetch(proxyURL(cfg.base+'/messages'),{method:'POST',headers:{'x-api-key':cfg.llmKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},
+    const r=await fetch(cfg.base+'/messages',{method:'POST',headers:{'x-api-key':cfg.llmKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},
       body:JSON.stringify({model:cfg.model,max_tokens:300,system:sys,messages:history})});
     const d=await rawJson(r);
     if(!d.content) throw new Error('Claude 回應缺 content：'+JSON.stringify(d).slice(0,200));
     const t=d.content.map(c=>c.text||'').join(''); history.push({role:'assistant',content:t}); return t;
   } else if(cfg.provider==='gemini'){
     const contents=history.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
-    const r=await fetch(proxyURL(`${cfg.base}/models/${cfg.model}:generateContent?key=${cfg.llmKey}`),{method:'POST',headers:{'content-type':'application/json'},
+    const r=await fetch(`${cfg.base}/models/${cfg.model}:generateContent?key=${cfg.llmKey}`,{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({system_instruction:{parts:[{text:sys}]},contents})});
     const d=await rawJson(r);
     if(!d.candidates||!d.candidates[0]) throw new Error('Gemini 無回覆：'+JSON.stringify(d).slice(0,200));
     const t=d.candidates[0].content.parts.map(p=>p.text||'').join(''); history.push({role:'assistant',content:t}); return t;
   } else {
-    const r=await fetch(proxyURL(cfg.base+'/chat/completions'),{method:'POST',headers:{'authorization':'Bearer '+cfg.llmKey,'content-type':'application/json'},
+    const r=await fetch(cfg.base+'/chat/completions',{method:'POST',headers:{'authorization':'Bearer '+cfg.llmKey,'content-type':'application/json'},
       body:JSON.stringify({model:cfg.model,max_tokens:300,messages:[{role:'system',content:sys},...history]})});
     const d=await rawJson(r);
     if(!d.choices||!d.choices[0]) throw new Error('LLM 無回覆：'+JSON.stringify(d).slice(0,200));
