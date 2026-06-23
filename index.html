@@ -111,6 +111,7 @@
 
     <label>① LLM 供應商</label>
     <select id="llmProvider">
+      <option value="groq">🆓 Groq（免費 · Llama 3.3 70B）</option>
       <option value="openai">OpenAI 相容（OpenAI / Groq / OpenRouter / OpenCode / 本地…）</option>
       <option value="opencode">OpenCode (big-pickle)</option>
       <option value="anthropic">Anthropic (Claude)</option>
@@ -150,9 +151,9 @@ Rules:
 
 const cfg=JSON.parse(localStorage.getItem('lizaCfg')||'{}');
 function fillSetup(){
-  $('llmProvider').value=cfg.provider||'openai';
-  $('llmBase').value=cfg.base||'https://api.openai.com/v1';
-  $('llmModel').value=cfg.model||'gpt-4o-mini';
+  $('llmProvider').value=cfg.provider||'groq';
+  $('llmBase').value=cfg.base||'https://api.groq.com/openai/v1';
+  $('llmModel').value=cfg.model||'llama-3.3-70b-versatile';
   $('llmKey').value=cfg.llmKey||'';
   $('xiKey').value=cfg.xiKey||'';
   $('persona').value=cfg.persona||DEFAULT_PERSONA;
@@ -165,6 +166,7 @@ if(ready()) $('setup').style.display='none', setState('點麥克風或輸入文�
 $('openSetup').onclick=()=>{$('setup').style.display='flex';};
 $('llmProvider').onchange=e=>{
   const v=e.target.value;
+  if(v==='groq'){$('llmBase').value='https://api.groq.com/openai/v1';$('llmModel').value='llama-3.3-70b-versatile';$('llmKey').value='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';}
   if(v==='openai'){$('llmBase').value='https://api.openai.com/v1';$('llmModel').value='gpt-4o-mini';}
   if(v==='anthropic'){$('llmBase').value='https://api.anthropic.com/v1';$('llmModel').value='claude-haiku-4-5';}
   if(v==='gemini'){$('llmBase').value='https://generativelanguage.googleapis.com/v1beta';$('llmModel').value='gemini-2.0-flash';}
